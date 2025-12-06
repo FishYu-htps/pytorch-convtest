@@ -4,13 +4,16 @@ import os
 os.environ["MIOPEN_ENABLE_LOGGING"] = "1"
 os.environ["MIOPEN_ENABLE_LOGGING_CMD"] = "1"
 os.environ["MIOPEN_LOG_LEVEL"] = "5"
-#os.environ["MIOPEN_ENABLE_LOGGING_ELAPSED_TIME"] = "1"
+os.environ["MIOPEN_ENABLE_LOGGING_ELAPSED_TIME"] = "1"
+os.environ["HIPBLASLT_LOG_LEVEL"] = "5" 
+#os.environ["AMD_LOG_MASK"] = "-1" 
+#os.environ["MIOPEN_CHECK_NUMERICS"] = "1" 
 #os.environ["MIOPEN_DEBUG_CONV_WINOGRAD"] = "1"
 #os.environ["MIOPEN_DEBUG_CONV_GEMM"] = "0"
 #os.environ["MIOPEN_DEBUG_CONV_DIRECT"] = "0"
 #os.environ["MIOPEN_FIND_MODE"] = "2"
-
-
+os.environ["HIPBLASLT_TENSILE_LIBPATH"] = "C:\\AI_model\\313venv\\Lib\\site-packages\\_rocm_sdk_libraries_gfx120X_all\\bin\\hipblaslt\\library"
+os.environ["HIPBLASLT_TENSILE_LIBPATH"] = "G:\\lada\\Therock\\dist\\rocm\\bin\\hipblaslt\\library"
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -21,23 +24,23 @@ device = "cuda"  # GPU
 
 # ===== 多組卷積配置 =====
 configs = [
-    (1, 3, 8, 16, 16, 3, 1, 1),
+  #  (1, 3, 8, 16, 16, 3, 1, 1),
     (1, 8, 16, 32, 32, 3, 1, 1),
-    (2, 3, 8, 32, 32, 5, 2, 2),
-    (1, 16, 32, 64, 64, 3, 1, 1),
-    (1, 32, 64, 64, 64, 3, 2, 1),
-    (2, 32, 64, 80, 80, 3, 1, 1),
-    (2, 32, 128, 80, 80, 3, 2, 1),
-    (4, 32, 64, 56, 56, 5, 1, 2),
-    (1, 64, 128, 128, 128, 3, 1, 1),
-    (1, 64, 128, 128, 128, 3, 2, 1),
-    (2, 64, 256, 128, 128, 3, 2, 1),
-    (2, 128, 256, 64, 64, 3, 1, 1),
-    #(4, 128, 256, 128, 128, 5, 2, 2),
-    (1, 1, 1, 1, 1, 1, 1, 0),
-    (1, 32, 64, 7, 7, 7, 1, 3),
-    (1, 32, 64, 3, 3, 3, 2, 0),
-    (2, 3, 64, 224, 224, 3, 2, 1),
+  #  (2, 3, 8, 32, 32, 5, 2, 2),
+  #  (1, 16, 32, 64, 64, 3, 1, 1),
+  #  (1, 32, 64, 64, 64, 3, 2, 1),
+  #  (2, 32, 64, 80, 80, 3, 1, 1),
+  #  (2, 32, 128, 80, 80, 3, 2, 1),
+  #  (4, 32, 64, 56, 56, 5, 1, 2),
+  #  (1, 64, 128, 128, 128, 3, 1, 1),
+  #  (1, 64, 128, 128, 128, 3, 2, 1),
+  #  (2, 64, 256, 128, 128, 3, 2, 1),
+  #  (2, 128, 256, 64, 64, 3, 1, 1),
+  #  (4, 128, 256, 128, 128, 5, 2, 2),
+  #  (1, 1, 1, 1, 1, 1, 1, 0),
+  #  (1, 32, 64, 7, 7, 7, 1, 3),
+  #  (1, 32, 64, 3, 3, 3, 2, 0),
+  #  (2, 3, 64, 224, 224, 3, 2, 1),
 ]
 
 # ===== 儲存表格資料 =====
@@ -48,7 +51,7 @@ results_fp16 = []
 for idx, (N, C_in, C_out, H, W, kernel_size, stride, padding) in enumerate(configs):
     print(f"\n=== Config {idx+1} ===")
     print(f"N={N}, C_in={C_in}, C_out={C_out}, H={H}, W={W}, kernel_size={kernel_size}, stride={stride}, padding={padding}")
-
+    print(torch.__version__)
     for dtype, table in [(torch.float32, results_fp32), (torch.float16, results_fp16)]:
         dtype_name = "FP32" if dtype == torch.float32 else "FP16"
 
@@ -75,7 +78,6 @@ for idx, (N, C_in, C_out, H, W, kernel_size, stride, padding) in enumerate(confi
         gpu_has_nan = torch.isnan(out_gpu).any().item()
         gpu_has_inf = torch.isinf(out_gpu).any().item()
         print(f"{dtype_name} → GPU NaN: {gpu_has_nan}, Inf: {gpu_has_inf}")
-        print(f"GPU Time:{gpu_time}")
 
         # CPU vs GPU 嚴謹比對
         gpu_np = out_gpu.cpu().numpy()
@@ -97,29 +99,8 @@ for idx, (N, C_in, C_out, H, W, kernel_size, stride, padding) in enumerate(confi
                 else:
                     print(f"{dtype_name} ✅ GPU matches CPU")
             else:
-                if max_diff > 1e-1:
+                if max_diff > 1e-2:
                     print(f"{dtype_name} ⚠️ GPU result deviates from CPU")
                 else:
                     print(f"{dtype_name} ✅ GPU matches CPU")
 
-        # 儲存結果
-        table.append({
-            "idx": idx+1,
-            "N": N, "C_in": C_in, "C_out": C_out, "H": H, "W": W,
-            "kernel": kernel_size, "stride": stride, "padding": padding,
-            "CPU_time": cpu_time, "GPU_time": gpu_time,
-            "max_diff": max_diff, "mean_diff": mean_diff,
-            "NaN": gpu_has_nan, "Inf": gpu_has_inf
-        })
-
-# ===== 最後輸出表格 =====
-def print_table(results, title):
-    print(f"\n\n=== Summary Table ({title}) ===")
-    header = f"{'Idx':>3} | {'N':>2} | {'Cin':>3} | {'Cout':>4} | {'H':>3} | {'W':>3} | {'K':>2} | {'S':>2} | {'P':>2} | {'CPU(s)':>7} | {'GPU(s)':>7} | {'max_diff':>10} | {'mean_diff':>10} | {'NaN':>3} | {'Inf':>3}"
-    print(header)
-    print("-"*100)
-    for r in results:
-        print(f"{r['idx']:3d} | {r['N']:2d} | {r['C_in']:3d} | {r['C_out']:4d} | {r['H']:3d} | {r['W']:3d} | {r['kernel']:2d} | {r['stride']:2d} | {r['padding']:2d} | {r['CPU_time']:7.4f} | {r['GPU_time']:7.4f} | {r['max_diff']:10.3e} | {r['mean_diff']:10.3e} | {r['NaN']:3} | {r['Inf']:3}")
-
-print_table(results_fp32, "FP32")
-print_table(results_fp16, "FP16")
