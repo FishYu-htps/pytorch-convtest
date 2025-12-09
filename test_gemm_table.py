@@ -7,7 +7,7 @@ os.environ["MIOPEN_LOG_LEVEL"] = "5"
 #os.environ["MIOPEN_ENABLE_LOGGING_ELAPSED_TIME"] = "1"
 #os.environ["MIOPEN_DEBUG_CONV_WINOGRAD"] = "1"
 #os.environ["MIOPEN_DEBUG_CONV_GEMM"] = "0"
-#os.environ["MIOPEN_DEBUG_CONV_DIRECT"] = "0"
+#cos.environ["MIOPEN_DEBUG_CONV_DIRECT"] = "0"
 #os.environ["MIOPEN_FIND_MODE"] = "2"
 
 
