@@ -42,29 +42,35 @@ import argparse
 device = "cuda"
  
 
-def init(mode = 5):
+def init(mode = 5,fp16 = 1, cudnn = 1):
     if mode < 5:
         os.environ["MIOPEN_FIND_MODE"] = "1"
     else:
         os.environ["MIOPEN_FIND_MODE"] = "5"
     
-    #torch.backends.cudnn.enabled = False
+    if cudnn != 1:
+        torch.backends.cudnn.enabled = False
+
     print(f"cudnn: {torch.backends.cudnn.enabled}")
     config = get_default_gan_inference_config()
-    _model = load_model(config, mosaic_restoration_model_path, "cuda:0", fp16=True)
-    model = _model.to(device).half().eval()
+    enable_fp16 = fp16 == 1
+
+    _model = load_model(config, mosaic_restoration_model_path, "cuda:0", fp16=enable_fp16)
+    model = _model.to(device).eval()
     return model
 
 
 
-def warmup_all_shapes(model, start_frame=1, max_frames=180, warmup=False):
+def warmup_all_shapes(model, start_frame=1, max_frames=180, warmup=False, FP16=1):
     if warmup:
         print(f"Warmup: building FindDB for frame shapes ({start_frame}..{max_frames})...")
     else:
         print(f"Test: building FindDB for frame shapes ({start_frame}..{max_frames})...")
 
     for t in range(start_frame, max_frames + 1):
-        x = torch.randn(1, t, 3, 256, 256, device=device).half()
+        x = torch.randn(1, t, 3, 256, 256, device=device)
+        if FP16 == 1:
+            x=x.half()
         torch.cuda.synchronize()
         start = time.time()
         with torch.inference_mode():
@@ -78,29 +84,51 @@ def warmup_all_shapes(model, start_frame=1, max_frames=180, warmup=False):
         else:
             time.sleep(0.5)
 
+def warmup_one_shape(model, start_frame=1, max_frames=2, warmup=False, FP16=1):
+        if warmup:
+            print(f"Warmup: building FindDB for frame shape {start_frame}")
+            max_frames = 1
+        else:
+            print(f"Test: building FindDB for frame shape {start_frame}. {max_frames} times.")
 
-def run(mode: int, start_frame: int | None, max_frames: int | None):
+        for i in range(max_frames):
+            x = torch.randn(1, start_frame, 3, 256, 256, device=device)
+            if FP16 == 1:
+                x=x.half()
+            torch.cuda.synchronize()
+            start = time.time()
+            with torch.inference_mode():
+                y = model(inputs=x)
+            torch.cuda.synchronize()
+            print(f" Warmup T={start_frame:3d}: done in {time.time() - start:.4f} sec")
+            time.sleep(0.5)
+
+
+def run(mode: int, start_frame: int | None, max_frames: int | None, fp16: int | None, cudnn: int | None):
     print(f"mode = {mode}")
     print(f"START_FRAME = {start_frame}")
     print(f"MAX_FRAMES = {max_frames}")
-    model = init(mode=mode)
+    print(f"FP16 = {fp16}")
+    model = init(mode=mode,fp16=fp16,cudnn=cudnn)
     warmup = mode < 5
 
 
     if mode == 1:
-        run_mode_1(model, start_frame, max_frames,warmup)
+        run_mode_1(model, start_frame, max_frames,warmup,fp16)
     elif mode == 2:
         run_mode_2(model, start_frame, max_frames)
     elif mode == 3:
         run_mode_3(model, start_frame, max_frames)
     elif mode == 5:
-        run_mode_5(model, start_frame, max_frames,warmup)
+        run_mode_5(model, start_frame, max_frames,warmup,fp16)
+    elif mode == 6:
+        run_mode_6(model, start_frame, max_frames,warmup,fp16)
     else:
         raise ValueError(f"Unsupported mode: {mode}")
 
-def run_mode_1(start_frame, max_frames,warmup,model):
+def run_mode_1(model,start_frame, max_frames,warmup,fp16):
     print("Running mode 1")
-    warmup_all_shapes(model, start_frame=start_frame,max_frames=max_frames,warmup=warmup)
+    warmup_all_shapes(model, start_frame=start_frame,max_frames=max_frames,warmup=warmup,FP16=fp16)
     # 原本 mode = 1 的邏輯
 
 
@@ -168,9 +196,13 @@ def run_mode_3(model, start_frame, max_frames):
     print("Warmup for all shapes done.")
 
 
-def run_mode_5(model, start_frame, max_frames,warmup):
-    print("Running mode 5: Test shape")
-    warmup_all_shapes(model, start_frame=start_frame,max_frames=max_frames,warmup=warmup)
+def run_mode_5(model, start_frame, max_frames,warmup,fp16):
+    print("Running mode 5: Test shapes")
+    warmup_all_shapes(model, start_frame=start_frame,max_frames=max_frames,warmup=warmup,FP16=fp16)
+
+def run_mode_6(model, start_frame, max_frames,warmup,fp16):
+    print("Running mode 6: Test one shape")
+    warmup_one_shape(model, start_frame=start_frame,max_frames=max_frames,warmup=warmup,FP16=fp16)
 
 
 def parse_args():
@@ -187,18 +219,33 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--START_FRAME",
+        "--START",
         type=int,
         default=1,
         help="Start frame index"
     )
 
     parser.add_argument(
-        "--MAX_FRAMES",
+        "--MAX",
         type=int,
         default=180,
         help="Maximum number of frames to process"
     )
+    parser.add_argument(
+        "--FP16",
+        type=int,
+        default=1,
+        help="FP16 Enable"
+    )
+
+    parser.add_argument(
+        "--cudnn",
+        type=int,
+        default=1,
+        help="cudnn Enable"
+    )
+
+
 
     return parser.parse_args()
 
@@ -208,8 +255,10 @@ def main():
     args = parse_args()
     run(
         mode=args.mode,
-        start_frame=args.START_FRAME,
-        max_frames=args.MAX_FRAMES,
+        start_frame=args.START,
+        max_frames=args.MAX,
+        fp16=args.FP16,
+        cudnn=args.cudnn
     )
 
 
