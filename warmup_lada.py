@@ -14,7 +14,7 @@ from lada import LOG_LEVEL
 from lada.utils import image_utils, video_utils, threading_utils, mask_utils
 from lada.utils import visualization_utils
 from lada.models.basicvsrpp.inference import load_model,get_default_gan_inference_config
-from lada.utils.os_utils import gpu_has_tensor_cores
+
 #os.environ["MIOPEN_ENABLE_LOGGING"] = "1"
 #os.environ["MIOPEN_ENABLE_LOGGING_CMD"] = "1"
 #os.environ["HIPBLASLT_LOG_MASK"] = "32"
@@ -214,7 +214,7 @@ def parse_args():
         "--mode",
         type=int,
         default=5,
-        choices=[1, 2, 3,5],
+        choices=[1, 2, 3,5,6],
         help="Execution mode (default: 1)"
     )
 
