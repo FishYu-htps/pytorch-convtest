@@ -37,8 +37,17 @@ import queue
 import random
 import concurrent.futures
 import argparse
+import psutil
 
-
+p = psutil.Process(os.getpid())
+#p.cpu_affinity([0,1,2,3,4,5,6,7])
+#p.cpu_affinity([0,1,2,3])
+#p.cpu_affinity([0,3])
+#p.cpu_affinity([4,5,6,7])
+#p.cpu_affinity([8,9,10,11])
+#p.cpu_affinity([12,13,14,15])
+#p.cpu_affinity([4,5,8,9])
+p.cpu_affinity([1,3,5,7])
 device = "cuda"
  
 
